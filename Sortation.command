@@ -4,7 +4,7 @@
 # Purpose: Sorting MPNs
 # Author: Andras Kelemen, Miroslaw Duraj
 # Date: 29/Feb/2020
-$version = '-2.5';
+$version = '-2.7';
 
 #use strict;
 use Term::ANSIColor;
@@ -12,6 +12,7 @@ use Term::ANSIColor;
 use v5.10; # for say() function
 use Time::Piece;
 use File::Basename ();
+use Digest::SHA qw(sha256_hex);
 
 $dir = File::Basename::dirname($0);
 $logfile = "$0.log";
@@ -28,7 +29,7 @@ $password = 'p3user';
 #######
 #######
 #######
-
+goto SCANSERIAL;
 $stn = substr(`system_profiler SPHardwareDataType | awk '/Serial/ {print $4}'`,30,12);
 
 system ("echo '$time\tSortation tool started\n' >> $logfile");
@@ -77,6 +78,7 @@ $indicator2 = '';
 $qty_max = '';
 $result_qty = '';
 $mpn_upc = '';
+$routing = 'SCANUPC';
 
 while (1)
 {
@@ -94,6 +96,11 @@ while (1)
 	$UPC = uc($UPC);
 
 	$UPC_len = length $UPC;
+	
+	if ($UPC eq 'ADDUPC')
+	{
+	goto ADDUPC;
+	}
 
 	if ($UPC =~ /\D/ || $UPC_len != 12)
 	{
@@ -136,6 +143,7 @@ SCANSERIAL:
 $serial = '';
 $serial_len = '';
 $serial_first = '';
+$routing = 'SCANSERIAL';
 
 while (1)
 {
@@ -155,23 +163,17 @@ while (1)
 	{
 		goto SCANUPC;
 	}
-	elsif ($serial_first ne "S" || $serial_len != 13)
-	{
-		print color('bold red');
-		print("No valid Serial number. Try again...\n");
-		print color('reset');
-		system ("afplay '$dir/wrongansr.wav'");
-		sleep 3;
-		system ("echo '$time\t$serial : No valid Serial number. Try again...\n' >> $logfile");
-		goto SCANSERIAL; 
-	} else {
-		goto SORT;
-	}
+	
+	$validatedString = $serial;
+	checkFormat();
+	
+	goto SORT;
 }
 
 SORT:
 
 $validate = '';
+$routing = 'SORT';
 
 while (1) {
 
@@ -254,6 +256,7 @@ $quantity = '';
 $status = '';
 $serial = '';
 $indicator_open = '';
+$routing = 'SORTATION';
 
 while (1)
 {
@@ -340,6 +343,7 @@ CLEAR:
 $serial = '';
 $serial_len = '';
 $serial_first = '';
+$routing = 'CLEAR';
 
 while(1)
 {
@@ -360,8 +364,8 @@ while(1)
 		}
 		goto SORTATION;
 	}
-	
-	if ($serial_first ne "S" || $serial_len != 13)
+	checkFormat();
+	if (($serial_first ne "S" && $serial_len != 13) || ($serial_first ne "S" && $serial_len != 11))
 	{
 		print("No valid serial number. Try again...\n");
 		system ("afplay '$dir/wrongansr.wav'");
@@ -431,8 +435,33 @@ goto SORTATION;
 	
 }
 
+ADDUPC:
+while(1){
+print "I am here\n";
+<>;
+}
 
+###########################################################################################
 #sub routines
+sub checkFormat(){
+	$first1 = substr($validatedString,0,1);
+	$lengthValidatedString = length $validatedString;
+
+	if (($first1 ne "S" && $lengthValidatedString != 13) || ($first1 ne "S" && $lengthValidatedString != 11))
+	{
+	print "String: $validatedString does not match criteria (11 or 13 characters & starts with 'S')\n";
+	system "clear";
+	system ("afplay '$dir/redalert.wav' &");
+	print color('bold red');
+	print "Format not found. Try again.\n";
+	sleep 3;
+	goto $routing;
+	}
+else {
+		print color('bold green');print "Format looks good. Searching in database now...\n";print color('reset');;
+	}
+}
+
 sub change_status_to_open{
 	# query from the links table
     ($dbh) = @_;
@@ -553,6 +582,7 @@ sub display_sortation{
             print "|$location\t$quantity\t$status\t$mpn  |\n";
         }
     $location_type = substr($location,0,8);
+    $location_type =~ s/^\s+|\s+$//g;
 	
     } else {
     	print color('bold red');
@@ -646,7 +676,7 @@ sub check_first_loc{
     else
     {
 	  	print color('bold red');
-	  	print "ERROR: No available locations. Contact your Supervisor!\n";
+	  	print "ERROR: No available locations in db (they need to be set up as 'P3SORTxx'). Contact your Supervisor!\n";
 	  	print color ('reset');
 	  	system ("afplay '$dir/wrongansr.wav'");
 	  	print "Press ENTER to continue...";
