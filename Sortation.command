@@ -4,7 +4,8 @@
 # Purpose: Sorting MPNs
 # Author: Andras Kelemen, Miroslaw Duraj
 # Date: 29/Feb/2020
-$version = '-2.7';
+$project = 'sortation';
+$version = '-2.8.1';
 
 #use strict;
 use Term::ANSIColor;
@@ -29,7 +30,7 @@ $password = 'p3user';
 #######
 #######
 #######
-goto SCANSERIAL;
+
 $stn = substr(`system_profiler SPHardwareDataType | awk '/Serial/ {print $4}'`,30,12);
 
 system ("echo '$time\tSortation tool started\n' >> $logfile");
@@ -347,6 +348,7 @@ $routing = 'CLEAR';
 
 while(1)
 {
+	print color('reset');
 	print("Scan one of the serial numbers from location $location or scan COMPLETE to cancel: ");
 	chomp ($serial = <>);
 	$serial = uc($serial);
@@ -364,15 +366,8 @@ while(1)
 		}
 		goto SORTATION;
 	}
+	$validatedString = $serial;
 	checkFormat();
-	if (($serial_first ne "S" && $serial_len != 13) || ($serial_first ne "S" && $serial_len != 11))
-	{
-		print("No valid serial number. Try again...\n");
-		system ("afplay '$dir/wrongansr.wav'");
-		sleep 2;
-		system ("echo '$time\t$serial : Invalid SERIAL scan\n' >> $logfile");
-		goto CLEAR; 
-	}
 	
 $dbh = DBI->connect($dsn,$username,$password, \%attr) or handle_error (DBI::errstr);
 check_sn_in_sort($dbh);
@@ -436,13 +431,78 @@ goto SORTATION;
 }
 
 ADDUPC:
+$routing = 'ADDUPC';
 while(1){
+	$dbh = DBI->connect($dsn0,$username,$password, \%attr) or handle_error (DBI::errstr);
+	checkPassword($dbh);
+
+	system clear;
+	print color('bold green');
+	print "Sortation$version - $stn\n";
+	print color('reset');
+	print "Are you sure you want to add new MPN/UPC to db (type 'Y')? ";
+	chomp ($confirmation = <>);
+	$confirmation = uc($confirmation);
+	$confirmation =~ s/[\n\r\s]+//g;
+
+	if ($confirmation ne 'Y') {
+		goto RESET;
+	}
+
+print "Enter password: ";
+
+chomp ($pass = <>);
+$pass = sha256_hex($pass);
+
+system clear;
+	print color('bold green');
+	print "Sortation$version - $stn\n";
+	print color('reset');
+if ($key ne $pass) {
+	print color('bold red');
+	system ("afplay '$dir/sounds/wrongansr.wav'");
+	print "Incorrect password...going back to beginning...\n";
+	print color('reset');
+	sleep 3;
+	goto RESET;
+}
+
+
 print "I am here\n";
 <>;
 }
 
 ###########################################################################################
 #sub routines
+
+sub checkPassword{
+# query from the links table
+    ($dbh) = @_;
+    $sql = "SELECT encryptedpassword FROM passwords WHERE name = '$project'";
+    $sth = $dbh->prepare($sql);
+    
+    # execute the query
+    $sth->execute();
+    
+	my $ref;
+    
+    $ref = $sth->fetchall_arrayref([]);
+    
+	if ((0 + @{$ref}) eq 0) {
+		system ("afplay '$dir/sounds/redalert.wav'");
+		print color('bold red');
+		print "No passwords found in db...Contact TE\n";
+		print color('reset');
+		exit;
+	} else {
+		foreach $data (@$ref)
+            {
+                ($key) = @$data;
+            }
+	}
+    $sth->finish;
+}
+
 sub checkFormat(){
 	$first1 = substr($validatedString,0,1);
 	$lengthValidatedString = length $validatedString;
@@ -916,7 +976,7 @@ sub handle_error{
 }
 
 sub check_version{
-my $file = '/Users/Shared/Sortation.command';
+my $file = "$dir/Sortation.command";
 
 open(FH, $file) or die $!;
 
@@ -937,8 +997,8 @@ while(my $string = <FH>)
 		else
 		{
 			print "Found mismatch match. Restarting...\n";
-			
-			system("/Users/Shared/Launch_sortation.command $arg1");
+	
+			system("$dir/Launch_sortation.command $arg1");
 			exit;
 		}
 	}
