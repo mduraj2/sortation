@@ -5,7 +5,7 @@
 # Author: Andras Kelemen, Miroslaw Duraj
 # Date: 29/Feb/2020
 $project = 'sortation';
-$version = '-2.8.1';
+$version = '-3.0';
 
 #use strict;
 use Term::ANSIColor;
@@ -37,6 +37,7 @@ system ("echo '$time\tSortation tool started\n' >> $logfile");
 
 system "clear";
 $dbh = DBI->connect($dsn0,$username,$password, \%attr) or handle_error (DBI::errstr);
+# $dbh = DBI->connect($dsn,$username,$password, \%attr) or handle_error (DBI::errstr);
 
 check_sn($dbh);
 
@@ -100,7 +101,7 @@ while (1)
 	
 	if ($UPC eq 'ADDUPC')
 	{
-	goto ADDUPC;
+	goto VERIFYPASS;
 	}
 
 	if ($UPC =~ /\D/ || $UPC_len != 12)
@@ -166,7 +167,7 @@ while (1)
 	}
 	
 	$validatedString = $serial;
-	checkFormat();
+	checkFormatSerial();
 	
 	goto SORT;
 }
@@ -367,7 +368,7 @@ while(1)
 		goto SORTATION;
 	}
 	$validatedString = $serial;
-	checkFormat();
+	checkFormatSerial();
 	
 $dbh = DBI->connect($dsn,$username,$password, \%attr) or handle_error (DBI::errstr);
 check_sn_in_sort($dbh);
@@ -427,11 +428,10 @@ print "Please print GS1 label in Oryx, press enter to continue...\n";
 check_version();
 
 goto SORTATION;
-	
 }
 
-ADDUPC:
-$routing = 'ADDUPC';
+VERIFYPASS:
+$routing = 'VERIFYPASS';
 while(1){
 	$dbh = DBI->connect($dsn0,$username,$password, \%attr) or handle_error (DBI::errstr);
 	checkPassword($dbh);
@@ -446,6 +446,10 @@ while(1){
 	$confirmation =~ s/[\n\r\s]+//g;
 
 	if ($confirmation ne 'Y') {
+		print color('yellow');
+		print "You have NOT confirmed. Going back to the beginning...\n";
+		print color('reset');
+		sleep 5;
 		goto RESET;
 	}
 
@@ -465,15 +469,184 @@ if ($key ne $pass) {
 	print color('reset');
 	sleep 3;
 	goto RESET;
+} else {
+	goto ADDUPC;
+}
 }
 
+ADDUPC:
+$routing='ADDUPC';
+$UPC='';
+{
+	system clear;
+	print color('bold green');
+	print "UPDATING MPN_BOM TABLE - DO NOT FORGET TO TYPE 'COMPLETE' ONCE YOU ARE DONE\n";
+	print color('reset');
+	
+	$dbh = DBI->connect($dsn,$username,$password, \%attr) or handle_error (DBI::errstr);
 
-print "I am here\n";
-<>;
+	print("Scan/type the UPC of the part: ");
+
+	chomp ($UPC = <>);
+	$UPC = uc($UPC);
+	
+	if ($UPC eq 'COMPLETE')
+	{
+	goto RESET;
+	}
+
+	$validatedString=$UPC;
+	checkFormatUPC();
+	$UPC=$validatedString;
+
+	check_qty_max($dbh);
+
+	if($result_qty == 0){
+		print color('bold red');
+		system ("afplay '$dir/wrongansr.wav'");
+		print "Entered UPC already exists in db...\n";
+		sleep 3;
+		print color ('reset');
+		goto $routing;
+	} else {
+		sleep 1;
+goto ADDMPN;
+	}
 }
+
+ADDMPN:
+$routing = 'ADDMPN';
+$MPN='';
+{
+	system clear;
+	print color('bold green');
+	print "UPDATING MPN_BOM TABLE - DO NOT FORGET TO TYPE 'COMPLETE' ONCE YOU ARE DONE\n";
+	print color('reset');
+	
+	$dbh = DBI->connect($dsn,$username,$password, \%attr) or handle_error (DBI::errstr);
+
+	print("Scan/type the MPN for UPC $UPC: ");
+
+	chomp ($MPN = <>);
+	$MPN = uc($MPN);
+	
+	if ($MPN eq 'COMPLETE')
+	{
+	goto RESET;
+	}
+
+	$validatedString=$MPN;
+	checkFormatMPN();
+	$MPN=$validatedString;
+sleep 1;
+goto ADDTYPE;
+}
+
+ADDTYPE:
+$routing='ADDTYPE';
+$type='';
+{
+	system clear;
+	print color('bold green');
+	print "UPDATING MPN_BOM TABLE - DO NOT FORGET TO TYPE 'COMPLETE' ONCE YOU ARE DONE\n";
+	print color('reset');
+	
+	$dbh = DBI->connect($dsn,$username,$password, \%attr) or handle_error (DBI::errstr);
+
+	print("Enter the TYPE for $UPC and $MPN: ");
+
+	chomp ($type = <>);
+	
+	if (uc($type) eq 'COMPLETE')
+	{
+	goto RESET;
+	} 
+	if (length $type > 10){
+		print color('bold red');
+		print "Type can only be 10 digits.\n";
+		print color('reset');
+		sleep 3;
+		goto $routing;
+	}else {
+		goto ADDQTY;
+	}
+	
+}
+
+ADDQTY:
+$routing='ADDQTY';
+$qty_max = '';
+{
+	system clear;
+	print color('bold green');
+	print "UPDATING MPN_BOM TABLE - DO NOT FORGET TO TYPE 'COMPLETE' ONCE YOU ARE DONE\n";
+	print color('reset');
+	
+	print("Enter the QUANTITY for $UPC and $MPN and $type: ");
+	chomp ($qty_max = <>);
+
+	if (uc($qty_max) eq 'COMPLETE')
+	{
+	goto RESET;
+	} 
+
+if ($qty_max =~ /\D/ || $qty_max>1000){
+		print color('red');
+		print("Not valid format. Try again...\n");
+		system ("afplay '$dir/wrongansr.wav'");
+		sleep 3;
+		goto $routing;
+}
+
+addUPCToDB($dbh);
+print color('bold green');
+print "A new record has been created\n";
+print color('reset');
+print "Returning...\n";
+sleep 3;
+goto ADDUPC;
+}
+
 
 ###########################################################################################
 #sub routines
+
+sub checkFormatMPN(){
+	$first1 = substr($validatedString,0,1);
+	$first2 = substr($validatedString,0,2);
+	$first3 = substr($validatedString,0,3);
+	$first4 = substr($validatedString,0,4);
+	$lengthValidatedString = length $validatedString;
+	$substring = "/A";
+
+	if (not (((index($validatedString, $substring) != -1) && ($lengthValidatedString eq 8 || $lengthValidatedString eq 9) && $first1 eq "M")|| ($lengthValidatedString eq 9 && $first2 eq "Z1"))){
+		print "String: $validatedString does not match criteria (8-9 characters & starts with 'M' & includes '/A' or 9 characters & starts with 'Z')\n";
+		system "clear";
+		system ("afplay '$dir/redalert.wav' &");
+		print color('bold red');
+		print "Format not found. Try again.\n";
+		sleep 3;
+		goto $routing;
+	} else {
+		print color('bold green');print "Format looks good. Continuing now...\n";print color('reset');;
+	}
+}
+
+sub checkFormatUPC{
+$lengthValidatedString = length $validatedString;
+	if ($validatedString =~ /\D/ || $lengthValidatedString != 12)
+	{
+		print color('red');
+		print("Not valid UPC code. Try again...\n");
+		system ("afplay '$dir/wrongansr.wav'");
+		sleep 3;
+		system ("echo '$time\t$UPC : Not valid UPC code\n' >> $logfile");
+		goto $routing;
+}
+else {
+			print color('bold green');print "Format looks good. Moving on...\n";print color('reset');;
+}
+}
 
 sub checkPassword{
 # query from the links table
@@ -503,7 +676,7 @@ sub checkPassword{
     $sth->finish;
 }
 
-sub checkFormat(){
+sub checkFormatSerial(){
 	$first1 = substr($validatedString,0,1);
 	$lengthValidatedString = length $validatedString;
 
@@ -520,6 +693,18 @@ sub checkFormat(){
 else {
 		print color('bold green');print "Format looks good. Searching in database now...\n";print color('reset');;
 	}
+}
+
+sub addUPCToDB{
+
+	# query from the links table
+    ($dbh) = @_;
+    $sql = "INSERT INTO p3.mpn_bom VALUES (NULL,'$UPC','$MPN','$type','$qty_max')";
+    $sth = $dbh->prepare($sql);
+    
+    # execute the query
+    $sth->execute();
+   	$sth->finish;
 }
 
 sub change_status_to_open{
@@ -580,10 +765,11 @@ sub check_qty_max{
 	$mpn_upc = '';
 	$type_upc = '';
 	$qty_max = '';
+
 	# query from the links table
     ($dbh) = @_;
-    $sql = "SELECT mpn,type,qty_max FROM mpn_bom
-	WHERE UPC =('$UPC')";
+    $sql = "SELECT mpn,type,qty_max FROM p3.mpn_bom
+	WHERE UPC ='$UPC'";
     $sth = $dbh->prepare($sql);
     
     # execute the query
