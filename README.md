@@ -17,3 +17,11 @@ tables(columns):
 #1 mpn_bom(id,upc,mpn,type,qty_max),
 #2 sort_loc(id,line,location,serial_number,UPC,location_orig,date_in,date_out),
 #3 sortation(id,line,location,upc,quantity,status,loc_status,last_change,qty_max,mpn)
+
+The locations in db need to be set up as P3SORTxxxx, otherwise the script will not work.
+The loc_status needs to be set to 'LIVE'. This function is not available for the user - it can only be done by a db admin.
+
+# version history
+
+1.0 initial app
+3.0 the app has been rebuilt, the logic is simpler now, adding an option to update mpn_bom values from the app interface
