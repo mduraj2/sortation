@@ -23,5 +23,5 @@ The loc_status needs to be set to 'LIVE'. This function is not available for the
 
 # version history
 
-1.0 initial app
-3.0 the app has been rebuilt, the logic is simpler now, adding an option to update mpn_bom values from the app interface
+1.0 - 29.02.2020 - initial app
+3.0 - 17.07.2023 - the app has been rebuilt, the logic is simpler now, adding an option to update mpn_bom values from the app interface
