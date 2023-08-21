@@ -5,7 +5,7 @@
 # Author: Andras Kelemen, Miroslaw Duraj
 # Date: 29/Feb/2020
 $project = 'sortation';
-$version = '-3.1';
+$version = '-3.2';
 
 #use strict;
 use Term::ANSIColor;
@@ -1230,7 +1230,7 @@ while(my $string = <FH>)
 		{
 			print "Found mismatch match. Restarting...\n";
 			system("$dir/Launch_sortation.command $arg1");
-			exit;
+			# exit;
 		}
 	}
 }
