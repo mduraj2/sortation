@@ -5,7 +5,7 @@
 # Author: Andras Kelemen, Miroslaw Duraj
 # Date: 29/Feb/2020
 $project = 'sortation';
-$version = '-3.0';
+$version = '-3.1';
 
 #use strict;
 use Term::ANSIColor;
@@ -73,7 +73,7 @@ else
 	}
 	
 SCANUPC:
-
+checkVersion($dbh);
 $UPC = '';
 $UPC_len = '';
 $indicator2 = '';
@@ -252,6 +252,7 @@ goto SCANUPC;
 
 SORTATION:
 
+checkVersion($dbh);
 $location = '';
 $first_6 = '';
 $quantity = '';
@@ -1149,6 +1150,51 @@ sub insert_serial{
     $sth->finish();
 }
 
+sub checkVersion{
+	($dbh) = @_;
+    $sql = "SELECT version FROM general.versions
+	WHERE name='$project'";
+
+    $sth = $dbh->prepare($sql);
+    
+    # execute the query
+    $sth->execute();
+	
+	my $ref;
+    
+    $ref = $sth->fetchall_arrayref([]);
+    if ((0 + @{$ref}) > 0)
+	{
+	 foreach $data (@$ref)
+            {
+                ($latestVersion) = @$data;
+            }
+												if ($version ne $latestVersion){
+													downloadLatest();
+													check_version();
+												}
+	} else {
+		print color('bold red');
+    	print "No version specified in db\n";
+		print color('reset');
+		print "#################################################\n";
+		print "Press Enter to continue...";
+		<>;
+    	goto SCANPART;
+	}
+	
+    $sth->finish;
+}
+
+sub downloadLatest{
+	$passwordToCopy = 'apple';
+	$userToCopy = 'apple';
+	$IPAddressToCopy = '172.30.1.199';
+
+	system `sshpass -p '$passwordToCopy' scp $userToCopy\@$IPAddressToCopy:/Users/Shared/Versions/sortation/sortation.command /Users/Shared/Versions/sortation`;
+
+}
+
 sub handle_error{
 	print color('bold red');
 	$time = localtime->datetime;
@@ -1175,15 +1221,14 @@ while(my $string = <FH>)
 		$new_ver = substr($string,12,$len_string);
 		print "\nNew version: $new_ver\n";
 		print "Current version: $version\n";
-		if ($new_ver eq $version)
+
+		if (($new_ver eq $version) && ($new_ver eq $latestVersion))
 		{
 			print "Found a match. Doing nothing...\n";
-		
 		}
 		else
 		{
 			print "Found mismatch match. Restarting...\n";
-	
 			system("$dir/Launch_sortation.command $arg1");
 			exit;
 		}
